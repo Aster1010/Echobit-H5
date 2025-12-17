@@ -109,9 +109,9 @@
                 return {
                     logoError: false,
                     currentTab: 'checkin',
-                    // 模拟用户数据 (实际应从 URL 参数读取)
-                    user: { name: 'CryptoWhale', title: '社区元老', level: 3, expPercent: 65, nextLevelExp: 350 },
-                    stats: { points: 8840, streak: 12, invites: 5 },
+                    // 模拟用户数据 (默认显示，等待 API 覆盖)
+                user: { name: 'Loading...', title: '社区新人', level: 1, expPercent: 0, nextLevelExp: 100 },
+                stats: { points: 0, streak: 0, invites: 0 },
                     
                     // 全量成就数据 (Hardcoded JSON)
                     achievementCategories: [
@@ -216,14 +216,39 @@
                     tg.ready();
                     tg.expand(); // 展开至全屏
                     
-                    // 获取用户信息 (如果是在 TG 内打开)
+                    // 1. 获取基础信息 (如果是在 TG 内打开)
                     if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
-                        this.user.name = tg.initDataUnsafe.user.first_name;
-                        // 这里可以通过 API 请求真实的用户成就数据来覆盖 this.achievementCategories 中的 active 状态
+                        this.user.name = tg.initDataUnsafe.user.first_name + (tg.initDataUnsafe.user.last_name ? ' ' + tg.initDataUnsafe.user.last_name : '');
+                        
+                        // 2. 尝试从 URL 参数获取数据 (方便调试/简单传参)
+                        // 格式: ?points=100&level=2&streak=5
+                        const urlParams = new URLSearchParams(window.location.search);
+                        if (urlParams.has('points')) this.stats.points = parseInt(urlParams.get('points'));
+                        if (urlParams.has('level')) this.user.level = parseInt(urlParams.get('level'));
+                        if (urlParams.has('streak')) this.stats.streak = parseInt(urlParams.get('streak'));
+                        if (urlParams.has('invites')) this.stats.invites = parseInt(urlParams.get('invites'));
+                        if (urlParams.has('title')) this.user.title = urlParams.get('title');
+
+                        // 3. (高级) 调用后端 API 获取完整数据
+                        // this.fetchUserStats(tg.initDataUnsafe.user.id);
+                    } else {
+                        // 非 TG 环境调试用
+                        this.user.name = "Guest User";
                     }
                 }
             },
             methods: {
+                // 预留 API 请求方法
+                async fetchUserStats(userId) {
+                    try {
+                        // const response = await fetch(`https://api.your-backend.com/user/${userId}`);
+                        // const data = await response.json();
+                        // this.stats = data.stats;
+                        // this.user = data.user;
+                    } catch (e) {
+                        console.error("Failed to fetch user data", e);
+                    }
+                },
                 shareAchievement() {
                     if (window.Telegram && window.Telegram.WebApp) {
                         window.Telegram.WebApp.sendData("SHARE_MY_STATS");
