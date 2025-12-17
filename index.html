@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Echobit 成就墙</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body { background-color: #0f172a; color: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        /* 隐藏滚动条但保留功能 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        /* Logo色渐变文字 (紫韵) */
+        .text-theme { background: linear-gradient(to right, #a78bfa, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        /* 勋章发光特效 */
+        .glow-active { box-shadow: 0 0 15px rgba(139, 92, 246, 0.4); border-color: #8b5cf6; }
+        .glow-locked { border-color: #334155; opacity: 0.7; filter: grayscale(100%); }
+    </style>
+</head>
+<body class="overflow-x-hidden select-none">
+    <div id="app" class="pb-24">
+        <!-- 顶部卡片 (Header Card) - 用户身份 -->
+        <div class="bg-gradient-to-r from-slate-900 to-slate-800 pb-10 pt-6 px-4 rounded-b-[2rem] shadow-xl relative z-0">
+            <div class="flex justify-between items-start mb-4">
+                <div>
+                    <!-- Logo Area -->
+                    <div class="flex items-center gap-2 mb-2">
+                        <img src="logo.png" alt="Echobit" class="h-5 w-auto object-contain">
+                    </div>
+                    <div class="text-sm text-slate-400 uppercase tracking-wider mb-1">社区身份卡</div>
+                    <div class="text-2xl font-bold text-white flex items-center gap-2">
+                        {{ user.name }}
+                        <span class="px-2 py-0.5 text-[10px] bg-violet-500/20 text-violet-300 border border-violet-500/30 rounded-full">Lv.{{ user.level }}</span>
+                    </div>
+                </div>
+                <div class="text-right pt-2">
+                    <div class="text-violet-400 font-bold text-lg">{{ user.title }}</div>
+                    <div class="text-xs text-slate-500">距下一级 {{ user.nextLevelExp }} EXP</div>
+                </div>
+            </div>
+            <!-- Progress Bar -->
+            <div class="w-full bg-slate-700/50 rounded-full h-2 mb-2">
+                <div class="bg-gradient-to-r from-violet-500 to-fuchsia-500 h-2 rounded-full transition-all duration-1000" :style="{ width: user.expPercent + '%' }"></div>
+            </div>
+        </div>
+
+        <!-- 核心数据栏 (Core Stats Grid) -->
+        <div class="grid grid-cols-3 gap-2 px-4 -mt-6 relative z-10">
+            <div class="bg-slate-800 p-3 rounded-xl border border-slate-700 shadow-lg text-center backdrop-blur-sm">
+                <div class="text-xs text-slate-400">当前积分</div>
+                <div class="text-lg font-bold text-violet-400">{{ stats.points }}</div>
+            </div>
+            <div class="bg-slate-800 p-3 rounded-xl border border-slate-700 shadow-lg text-center backdrop-blur-sm">
+                <div class="text-xs text-slate-400">连续签到</div>
+                <div class="text-lg font-bold text-blue-400">{{ stats.streak }}天</div>
+            </div>
+            <div class="bg-slate-800 p-3 rounded-xl border border-slate-700 shadow-lg text-center backdrop-blur-sm">
+                <div class="text-xs text-slate-400">邀请人数</div>
+                <div class="text-lg font-bold text-green-400">{{ stats.invites }}</div>
+            </div>
+        </div>
+
+        <!-- 勋章展示区 (Badge Wall) -->
+        <div class="mt-8 px-4">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-bold text-white border-l-4 border-violet-500 pl-3">荣誉勋章馆</h2>
+                <span class="text-xs text-slate-500">已收集: {{ unlockedCount }}/{{ totalCount }}</span>
+            </div>
+            
+            <!-- Tabs -->
+            <div class="flex space-x-2 overflow-x-auto no-scrollbar mb-4 pb-2">
+                <button v-for="cat in achievementCategories" :key="cat.id" 
+                    @click="currentTab = cat.id" 
+                    :class="['px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all', 
+                    currentTab === cat.id ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/20' : 'bg-slate-800 text-slate-400 border border-slate-700']">
+                    {{ cat.name }}
+                </button>
+            </div>
+            
+            <!-- Grid -->
+            <div class="grid grid-cols-3 gap-3">
+                <div v-for="item in currentBadges" :key="item.title" 
+                    :class="['flex flex-col items-center p-3 rounded-xl border bg-slate-800 transition-all duration-300 relative overflow-hidden', 
+                    item.active ? 'glow-active' : 'glow-locked border-slate-700']">
+                    
+                    <div v-if="!item.active" class="absolute top-1 right-1 text-xs opacity-50">🔒</div>
+                    <div class="text-3xl mb-2">{{ item.icon }}</div>
+                    <div class="text-xs font-bold text-center leading-tight mb-1 h-8 flex items-center justify-center">{{ item.title }}</div>
+                    <div class="text-[10px] text-slate-500 text-center scale-90">{{ item.condition }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部交互 -->
+        <div class="fixed bottom-0 left-0 right-0 p-4 bg-slate-900/90 backdrop-blur border-t border-slate-800 z-50">
+            <button @click="shareAchievement" class="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-violet-500/20 active:scale-95 transition-transform">
+                📤 炫耀我的战绩
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    logoError: false,
+                    currentTab: 'checkin',
+                    // 模拟用户数据 (实际应从 URL 参数读取)
+                    user: { name: 'CryptoWhale', title: '社区元老', level: 3, expPercent: 65, nextLevelExp: 350 },
+                    stats: { points: 8840, streak: 12, invites: 5 },
+                    
+                    // 全量成就数据 (Hardcoded JSON)
+                    achievementCategories: [
+                        {
+                            name: "📅 签到成就",
+                            id: "checkin",
+                            items: [
+                                { title: "新手报到", condition: "连续签到 1 天", icon: "🌱", active: true },
+                                { title: "初心不改", condition: "连续签到 7 天", icon: "👊", active: true },
+                                { title: "坚持不懈", condition: "连续签到 30 天", icon: "🔥", active: false },
+                                { title: "百日筑基", condition: "连续签到 100 天", icon: "🏗️", active: false },
+                                { title: "年度勇士", condition: "连续签到 365 天", icon: "🛡️", active: false },
+                                { title: "断签复活", condition: "断签后重新连续签到 30 天", icon: "❤️", active: false },
+                                { title: "周末战士", condition: "连续4周周末签到", icon: "🏖️", active: false },
+                                { title: "凌晨党", condition: "凌晨0-2点签到 10 次", icon: "🌙", active: false },
+                                { title: "早起鸟", condition: "早上6-8点签到 30 次", icon: "🐦", active: false },
+                                { title: "夜猫子", condition: "晚上22-24点签到 30 次", icon: "🦉", active: false },
+                                { title: "签到狂人", condition: "单月签到 30 天（全勤）", icon: "📆", active: false },
+                                { title: "签到达人", condition: "累计签到 200 天", icon: "🎖️", active: false },
+                                { title: "签到大师", condition: "累计签到 500 天", icon: "👑", active: false },
+                                { title: "签到之神", condition: "累计签到 1000 天", icon: "🔱", active: false },
+                                { title: "永不断签", condition: "连续签到 180 天", icon: "♾️", active: false }
+                            ]
+                        },
+                        {
+                            name: "🤝 社交成就",
+                            id: "social",
+                            items: [
+                                { title: "社交达人", condition: "邀请 3 位好友", icon: "👋", active: true },
+                                { title: "KOL", condition: "邀请 10 位好友", icon: "📢", active: false },
+                                { title: "超级节点", condition: "邀请 50 位好友", icon: "🌐", active: false },
+                                { title: "分享达人", condition: "分享内容 10 次", icon: "📤", active: false },
+                                { title: "爆款制造机", condition: "分享获得 100+ 转发", icon: "🚀", active: false },
+                                { title: "社群活跃王", condition: "Echobit 社群发言 100 次", icon: "💬", active: true },
+                                { title: "点赞狂魔", condition: "点赞他人 500 次", icon: "❤️", active: false },
+                                { title: "热心助人", condition: "回答被标记'有帮助' 30 次", icon: "🤝", active: false },
+                                { title: "话题王", condition: "发起的话题获得 50+ 回复", icon: "🎤", active: false },
+                                { title: "表情包大师", condition: "发送 1000 个表情", icon: "😂", active: false },
+                                { title: "长评论家", condition: "发表 100 字以上评论 20 次", icon: "📝", active: false },
+                                { title: "社群元老", condition: "加入社群 365 天", icon: "🏛️", active: false },
+                                { title: "全勤代表", condition: "30 天内每天在社群冒泡", icon: "🙋", active: false },
+                                { title: "午夜聊天室", condition: "凌晨在社群聊天 50 次", icon: "🌚", active: false },
+                                { title: "表情包收藏家", condition: "收集 50 个不同表情包", icon: "📦", active: false },
+                                { title: "话痨", condition: "单日发送消息 100 条", icon: "🗣️", active: false },
+                                { title: "社交网络", condition: "你的邀请网络达到 3 层", icon: "🕸️", active: false },
+                                { title: "百人团长", condition: "邀请 100 位好友", icon: "⚔️", active: false },
+                                { title: "分享狂人", condition: "分享内容 100 次", icon: "📲", active: false },
+                                { title: "病毒营销", condition: "分享获得 1000+ 转发", icon: "🦠", active: false }
+                            ]
+                        },
+                        {
+                            name: "🎮 互动成就",
+                            id: "interaction",
+                            items: [
+                                { title: "破冰者", condition: "完成首次互动", icon: "🔨", active: true },
+                                { title: "人格探索者", condition: "完成人格测试", icon: "🧩", active: false },
+                                { title: "占星爱好者", condition: "查看运势 7 天", icon: "🔮", active: true },
+                                { title: "设置达人", condition: "完善所有个人设置", icon: "⚙️", active: false },
+                                { title: "完美主义者", condition: "个人资料完成度 100%", icon: "💯", active: false },
+                                { title: "意见领袖", condition: "提交功能建议被采纳", icon: "💡", active: false },
+                                { title: "Bug猎人", condition: "报告Bug 5 个", icon: "🐛", active: false },
+                                { title: "测试达人", condition: "参与内测新功能 10 次", icon: "🧪", active: false },
+                                { title: "反馈之星", condition: "提交有效反馈 20 次", icon: "⭐", active: false },
+                                { title: "铁粉", condition: "使用Bot超过 180 天", icon: "💍", active: false }
+                            ]
+                        },
+                        {
+                            name: "🔒 隐藏成就",
+                            id: "hidden",
+                            items: [
+                                { title: "3月诞生月", condition: "3月签到每日积分翻倍", icon: "🎂", active: false },
+                                { title: "新年第一签", condition: "1.1 00:00-01:00 签到", icon: "🧧", active: false },
+                                { title: "财神爷", condition: "邀请5好友成为活跃用户", icon: "💰", active: false },
+                                { title: "凌晨3点", condition: "凌晨3点签到", icon: "🕒", active: false },
+                                { title: "彩蛋猎人", condition: "发现所有彩蛋", icon: "🥚", active: false }
+                            ]
+                        }
+                    ]
+                }
+            },
+            computed: {
+                // 获取当前 Tab 的数据
+                currentBadges() {
+                    const category = this.achievementCategories.find(c => c.id === this.currentTab);
+                    return category ? category.items : [];
+                },
+                // 统计总数
+                totalCount() {
+                    return this.achievementCategories.reduce((sum, cat) => sum + cat.items.length, 0);
+                },
+                // 统计已解锁数
+                unlockedCount() {
+                    return this.achievementCategories.reduce((sum, cat) => {
+                        return sum + cat.items.filter(item => item.active).length;
+                    }, 0);
+                }
+            },
+            mounted() {
+                // TG WebApp 初始化
+                if (window.Telegram && window.Telegram.WebApp) {
+                    const tg = window.Telegram.WebApp;
+                    tg.ready();
+                    tg.expand(); // 展开至全屏
+                    
+                    // 获取用户信息 (如果是在 TG 内打开)
+                    if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+                        this.user.name = tg.initDataUnsafe.user.first_name;
+                        // 这里可以通过 API 请求真实的用户成就数据来覆盖 this.achievementCategories 中的 active 状态
+                    }
+                }
+            },
+            methods: {
+                shareAchievement() {
+                    if (window.Telegram && window.Telegram.WebApp) {
+                        window.Telegram.WebApp.sendData("SHARE_MY_STATS");
+                    } else {
+                        alert("请在 Telegram 中打开以分享战绩！");
+                    }
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
